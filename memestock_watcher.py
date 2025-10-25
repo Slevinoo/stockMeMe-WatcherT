@@ -50,7 +50,7 @@ def send_error_email(smtp_conf, to_addresses, error_message):
         body = (
             "An error occurred in the MemeStock Watcher:\n\n"
             f"{error_message}\n\n"
-            f"UTC time: {datetime.now(datetime.utc).isoformat()}\n\n"
+            f"UTC time: {datetime.now(timezone.utc).isoformat()}\n\n"
             "Check logs or journalctl for more details."
         )
         send_email(smtp_conf, subject, body, to_addresses)
@@ -72,7 +72,7 @@ class MemeStockWatcher:
             send_email(
                 cfg["smtp"],
                 "[MemeWatcher] Service started",
-                f"MemeStock Watcher started at {datetime.now(datetime.utc).isoformat()} UTC",
+                f"MemeStock Watcher started at {datetime.now(timezone.utc).isoformat()} UTC",
                 cfg["notify_to"]
             )
         except Exception as e:
@@ -113,7 +113,7 @@ class MemeStockWatcher:
             return 0, 0, 0, 0
 
     def scan_once(self):
-        logging.info("Starting scan at %s", datetime.now(datetime.utc).isoformat())
+        logging.info("Starting scan at %s", datetime.now(timezone.utc).isoformat())
         trending = self.scan_reddit()
 
         if not trending:
