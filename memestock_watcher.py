@@ -7,6 +7,9 @@ import logging
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timezone
+from flask import Flask, jsonify
+import threading
+
 
 
 # ================== CONFIGURATION ==================
@@ -30,6 +33,12 @@ CONFIG = {
     "scan_interval": 900  # seconds (15 minutes)
 }
 # ====================================================
+
+# Status for REST API
+status_data = {
+    "status": "stopped",
+    "last_scan": None
+}
 
 
 def send_email(smtp_conf, subject, body, to_addresses):
@@ -136,30 +145,53 @@ class MemeStockWatcher:
             logging.info("No stocks meet criteria this round.")
 
     def run_loop(self):
-        cadence = self.cfg["scan_interval"]
-        send_error_email(self.cfg["smtp"], self.cfg["notify_to"], 'Error!')
+        logging.info("Running watcher loop. Interval: %s sec", self.scan_interval)
+        status_data["status"] = "running"  # mark running for API
+    
         while True:
             try:
                 self.scan_once()
+                status_data["last_scan"] = datetime.now(timezone.utc).isoformat()
             except Exception as e:
-                logging.exception("Error during scan: %s", e)
-                error_text = f"{type(e).__name__}: {str(e)}"
-                try:
-                    send_error_email(self.cfg["smtp"], self.cfg["notify_to"], error_text)
-                except Exception as mail_err:
-                    logging.error("Failed to send error notification: %s", mail_err)
-            time.sleep(cadence)
+                err = traceback.format_exc()
+                logging.error("Error in scan loop: %s", err)
+                status_data["status"] = "error"
+                send_email("MemeStock Watcher Error", err)
+            time.sleep(self.scan_interval)
+
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler("/var/log/memewatcher.log"),
-            logging.StreamHandler()
+    try:
+        watcher = MemeStockWatcher()
+        watcher.run_loop()  # REST API is already running in background
+    except KeyboardInterrupt:
+        logging.info("Watcher stopped by user.")
+        status_data["status"] = "stopped"
+    except Exception as e:
+        err = traceback.format_exc()
+        logging.error("Fatal error: %s", err)
+        send_email("MemeStock Watcher Fatal Error", err)
+        status_data["status"] = "error"
+
         ]
     )
 
     watcher = MemeStockWatcher(CONFIG)
     watcher.run_loop()
+
+# ---------------- REST API ---------------- #
+
+app = Flask(__name__)
+
+@app.route("/status")
+def status():
+    return jsonify(status_data)
+
+def start_api():
+    # Run Flask in a separate thread
+    app.run(host="0.0.0.0", port=5000)
+
+# Start API in background before watcher loop
+threading.Thread(target=start_api, daemon=True).start()
+
