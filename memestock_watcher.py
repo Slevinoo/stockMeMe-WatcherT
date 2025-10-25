@@ -137,7 +137,7 @@ class MemeStockWatcher:
 
     def run_loop(self):
         cadence = self.cfg["scan_interval"]
-        send_error_email(self.cfg["smtp"], self.cfg["notify_to"], error_text)
+        send_error_email(self.cfg["smtp"], self.cfg["notify_to"], 'Error!')
         while True:
             try:
                 self.scan_once()
